@@ -20,20 +20,22 @@
   }
 
   .filter-form {
-    flex-wrap: wrap;
+    display: none;
   }
 
   aside {
     top: 0;
+    display: none;
     margin-left: calc(-1 * var(--aside-width));
     transition: var(--transitions);
   }
 
   aside.active {
+    display: block;
     margin-left: 0;
   }
 
-  .aside-button.aside-button {
+  .aside-button {
     transition: var(--transitions);
   }
 
@@ -41,7 +43,7 @@
     transition: var(--transitions);
   }
 
-  .aside-button,
+  /* .aside-button,
   .navigation .add-transaction-button {
     position: fixed;
     left: 0;
@@ -52,7 +54,7 @@
     border-color: var(--color-sidebar-border);
     border-style: solid;
     border-width: 0 1px 1px 0;
-  }
+  } */
 
   .navigation .add-transaction-button {
     top: 42px;
@@ -64,8 +66,9 @@
     left: var(--aside-width);
   }
 
-  .aside-button {
-    top: 0;
+  #aside-button {
+    position: fixed;
+    top: 10rem;
     display: block;
     margin-left: 0;
   }
@@ -79,5 +82,9 @@
   .source-form,
   .source-editor-wrapper {
     left: 0;
+  }
+
+  #svelte-charts {
+    margin-top: 3rem;
   }
 }

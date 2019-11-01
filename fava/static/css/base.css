@@ -308,9 +308,9 @@ button.round,
   --transitions: all 0.2s ease-out;
 }
 
-body {
+/* body {
   padding: var(--header-height) 0 0 var(--aside-width);
-}
+} */
 
 header {
   position: fixed;

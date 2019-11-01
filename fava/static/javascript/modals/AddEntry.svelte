@@ -62,7 +62,6 @@
       bind:this={entryComponent}
       bind:entry />
     <div class="fieldset">
-      <span class="spacer" />
       <button
         type="submit"
         on:click|preventDefault={submitAndNew}

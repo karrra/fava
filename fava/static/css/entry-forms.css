@@ -42,16 +42,9 @@
 }
 
 .entry-form .account,
-.entry-form input[name="narration"] {
-  flex-basis: 200px;
-  flex-grow: 1;
-  min-width: 20em;
-}
-
+.entry-form input[name="narration"],
 .entry-form .payee {
-  flex-basis: 100px;
-  flex-grow: 1;
-  min-width: 10em;
+  width: 50%;
 }
 
 .entry-form input.metadata-value {
@@ -85,10 +78,6 @@
 
 .entry-form .posting {
   padding-left: 50px;
-}
-
-.entry-form .posting:last-child .amount {
-  width: 192px;
 }
 
 .entry-form .metadata {
