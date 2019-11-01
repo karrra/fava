@@ -634,3 +634,7 @@ td .status-indicator {
 .options td:nth-child(2) {
   white-space: normal;
 }
+
+#svelte-charts {
+  margin-top: 3rem;
+}
