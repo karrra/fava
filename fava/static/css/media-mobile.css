@@ -83,4 +83,17 @@
   .source-editor-wrapper {
     left: 0;
   }
+
+  article {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    padding: 1.5em;
+    margin-left: 0 !important;
+  }
+
+  .tree-table .num,
+  .tree-table .other {
+    width: 6em !important;
+  }
 }
