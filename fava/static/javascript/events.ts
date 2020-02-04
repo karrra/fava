@@ -1,4 +1,6 @@
-// Minimal event handler
+/**
+ * Minimal event handler
+ */
 class Events {
   events: Record<string, Function[]>;
 
@@ -21,7 +23,9 @@ class Events {
   }
 
   remove(event: string, callback: Function) {
-    if (!this.events[event].length) return;
+    if (!this.events[event].length) {
+      return;
+    }
     this.events[event] = this.events[event].filter(c => c !== callback);
   }
 

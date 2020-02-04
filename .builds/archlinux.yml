@@ -1,0 +1,13 @@
+image: archlinux
+packages:
+  - python
+  - nodejs
+  - npm
+  - python-tox
+sources:
+  - https://github.com/beancount/fava
+tasks:
+  - build: |
+      make -C fava
+  - test: |
+      make -C fava test

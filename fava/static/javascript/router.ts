@@ -4,19 +4,18 @@
 // load the content of the page and replace the <article> contents with them.
 
 import { Writable } from "svelte/store";
-import { select, selectAll, delegate, fetch, handleText } from "./helpers";
+import { select, delegate, fetch, handleText } from "./helpers";
 import e from "./events";
 import { notify } from "./notifications";
-import initSort from "./sort";
 import {
   urlHash,
   conversion,
   interval,
-  showCharts,
   filters,
   favaAPI,
   urlSyncedParams,
 } from "./stores";
+import { showCharts } from "./stores/chart";
 
 class Router {
   state: {
@@ -86,7 +85,9 @@ class Router {
     getUrl.searchParams.set("partial", "true");
 
     const svg = select(".fava-icon");
-    if (svg) svg.classList.add("loading");
+    if (svg) {
+      svg.classList.add("loading");
+    }
 
     try {
       const content = await fetch(getUrl.toString()).then(handleText);
@@ -96,13 +97,17 @@ class Router {
       }
       this.updateState();
       const article = select("article");
-      if (article) article.innerHTML = content;
+      if (article) {
+        article.innerHTML = content;
+      }
       e.trigger("page-loaded");
       urlHash.set(window.location.hash.slice(1));
     } catch (error) {
       notify(`Loading ${url} failed.`, "error");
     } finally {
-      if (svg) svg.classList.remove("loading");
+      if (svg) {
+        svg.classList.remove("loading");
+      }
     }
   }
 
@@ -185,31 +190,6 @@ class Router {
 const router = new Router();
 export default router;
 
-e.on("form-submit-query", (form: HTMLFormElement) => {
-  // @ts-ignore
-  const queryString = form.elements.query_string.value.trim();
-  if (queryString === "") {
-    return;
-  }
-
-  const url = new URL(window.location.toString());
-  url.searchParams.set("query_string", queryString);
-
-  const pageURL = url.toString();
-  url.searchParams.set("result_only", "true");
-
-  fetch(url.toString())
-    .then(handleText)
-    .then((data: string) => {
-      selectAll(".queryresults-wrapper").forEach(element => {
-        element.classList.add("toggled");
-      });
-      select("#query-container")!.insertAdjacentHTML("afterbegin", data);
-      initSort();
-      window.history.replaceState(null, "", pageURL);
-    });
-});
-
 e.on("page-init", () => {
   select("#reload-page")!.addEventListener("click", () => {
     router.reload();
@@ -246,11 +226,9 @@ e.on("page-init", () => {
   ): void {
     let value: T;
     if (typeof defaultValue === "boolean") {
-      // @ts-ignore
-      value = params.get(name) !== "false" && defaultValue;
+      value = (params.get(name) !== "false" && defaultValue) as T;
     } else {
-      // @ts-ignore
-      value = params.get(name) || defaultValue;
+      value = (params.get(name) as T) || defaultValue;
     }
     store.set(value);
 

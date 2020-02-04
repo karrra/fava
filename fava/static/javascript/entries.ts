@@ -1,16 +1,18 @@
 import router from "./router";
 import { notify } from "./notifications";
+import { todayAsString } from "./format";
 import { putAPI } from "./helpers";
 
-export class Posting {
+interface Posting {
   account: string;
-
   amount: string;
+}
 
-  constructor() {
-    this.account = "";
-    this.amount = "";
-  }
+export function emptyPosting(): Posting {
+  return {
+    account: "",
+    amount: "",
+  };
 }
 
 abstract class Entry {
@@ -23,7 +25,7 @@ abstract class Entry {
   constructor(type: string) {
     this.type = type;
     this.meta = {};
-    this.date = new Date().toISOString().slice(0, 10);
+    this.date = todayAsString();
   }
 }
 
@@ -50,12 +52,14 @@ export class Transaction extends Entry {
     this.flag = "*";
     this.payee = "";
     this.narration = "";
-    this.postings = [new Posting(), new Posting()];
+    this.postings = [emptyPosting(), emptyPosting()];
   }
 }
 
 export async function saveEntries(entries: Entry[]) {
-  if (!entries.length) return;
+  if (!entries.length) {
+    return;
+  }
   try {
     const data = await putAPI("add_entries", { entries });
     router.reload();

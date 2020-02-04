@@ -4,8 +4,10 @@
  * The charts heavily use d3 libraries.
  */
 
+import { group } from "d3-array";
 import { hierarchy } from "d3-hierarchy";
 import "d3-transition";
+import { get } from "svelte/store";
 
 import { getScriptTagJSON } from "../helpers";
 import { favaAPI, conversion } from "../stores";
@@ -26,7 +28,7 @@ import {
 
 import { BaseChart } from "./base";
 import { BarChart } from "./bar";
-import { LineChart } from "./line";
+import { LineChart, LineChartDatum } from "./line";
 import { ScatterPlot } from "./scatter";
 import {
   addInternalNodesAsLeaves,
@@ -67,42 +69,41 @@ e.on("page-init", () => {
   ]);
 });
 
-type FirstParameter<T> = T extends (arg: infer P) => any ? P : never;
-
 interface ChartWithData<T extends BaseChart> {
-  data: FirstParameter<T["draw"]>;
+  data: Parameters<T["draw"]>[0];
   renderer: (svg: SVGElement) => T;
 }
 
-const parsers = {
+const parsers: Record<
+  string,
+  (json: unknown, label: string) => ChartWithData<any>
+> = {
   balances(json: unknown): ChartWithData<LineChart> {
-    const series: Record<
-      string,
-      { name: string; values: { date: Date; name: string; value: number }[] }
-    > = {};
     const parsedData = array(
       object({
         date,
         balance: record(number),
       })
     )(json);
-    parsedData.forEach(({ date: date_, balance }) => {
+    const allValues: LineChartDatum[] = [];
+    for (const { date: date_, balance } of parsedData) {
       Object.entries(balance).forEach(([currency, value]) => {
-        const currencySeries = series[currency] || {
-          name: currency,
-          values: [],
-        };
-        currencySeries.values.push({
+        allValues.push({
           name: currency,
           date: date_,
           value,
         });
-        series[currency] = currencySeries;
       });
-    });
+    }
+    const data = [...group(allValues, v => v.name).entries()].map(
+      ([name, values]) => ({
+        name,
+        values,
+      })
+    );
 
     return {
-      data: Object.values(series),
+      data,
       renderer: (svg: SVGElement) =>
         new LineChart(svg).set(
           "tooltipText",
@@ -113,13 +114,12 @@ const parsers = {
         ),
     };
   },
-  commodities(json: unknown, label: string): ChartWithData<LineChart> | null {
+  commodities(json: unknown, label: string): ChartWithData<LineChart> {
     const parsedData = object({
       quote: string,
       base: string,
       prices: array(tuple([date, number])),
     })(json);
-    if (!parsedData.prices.length) return null;
 
     const renderer = (svg: SVGElement) =>
       new LineChart(svg).set(
@@ -147,6 +147,7 @@ const parsers = {
     const jsonData = array(
       object({ date, budgets: record(number), balance: record(number) })
     )(json);
+    const currentDateFmt = get(currentDateFormat);
     const data = jsonData.map(d => ({
       values: operatingCurrenciesWithConversion.map(name => ({
         name,
@@ -154,7 +155,7 @@ const parsers = {
         budget: d.budgets[name] || 0,
       })),
       date: d.date,
-      label: currentDateFormat(d.date),
+      label: currentDateFmt(d.date),
     }));
     const renderer = (svg: SVGElement) =>
       new BarChart(svg).set("tooltipText", d => {
@@ -170,6 +171,35 @@ const parsers = {
         return text;
       });
     return { data, renderer };
+  },
+  hierarchy(json: unknown): ChartWithData<HierarchyContainer> {
+    const hierarchyValidator: Validator<AccountHierarchy> = object({
+      account: string,
+      balance: record(number),
+      balance_children: record(number),
+      children: lazy(() => array(hierarchyValidator)),
+    });
+    const validator = object({
+      root: hierarchyValidator,
+      modifier: number,
+    });
+    const { root, modifier } = validator(json);
+    addInternalNodesAsLeaves(root);
+    const data: Record<string, AccountHierarchyNode> = {};
+
+    operatingCurrenciesWithConversion.forEach(currency => {
+      const currencyHierarchy: AccountHierarchyNode = hierarchy(root)
+        .sum(d => d.balance[currency] * modifier)
+        .sort((a, b) => (b.value || 0) - (a.value || 0));
+      if (currencyHierarchy.value) {
+        data[currency] = currencyHierarchy;
+      }
+    });
+
+    return {
+      data,
+      renderer: (svg: SVGElement) => new HierarchyContainer(svg),
+    };
   },
   scatterplot(json: unknown): ChartWithData<ScatterPlot> {
     const parser = array(
@@ -196,61 +226,73 @@ export function parseChartData() {
   )(getScriptTagJSON("#chart-data"));
   const result: (ChartWithData<any> & { name: string })[] = [];
   chartData.forEach(chart => {
-    switch (chart.type) {
-      case "balances":
-      case "bar":
-      case "commodities":
-      case "scatterplot": {
-        // eslint-disable-next-line
-        const res = parsers[chart.type](chart.data, chart.label);
-        if (res) {
-          result.push({
-            name: chart.label,
-            data: res.data,
-            renderer: res.renderer,
-          });
-        }
-        break;
-      }
-      case "hierarchy": {
-        const hierarchyValidator: Validator<AccountHierarchy> = object({
-          account: string,
-          balance: record(number),
-          balance_children: record(number),
-          children: lazy(() => array(hierarchyValidator)),
-        });
-        const validator = object({
-          root: hierarchyValidator,
-          modifier: number,
-        });
-        const chartData_ = validator(chart.data);
-        const { root } = chartData_;
-        addInternalNodesAsLeaves(root);
-        const data: Record<string, AccountHierarchyNode> = {};
-
-        operatingCurrenciesWithConversion.forEach(currency => {
-          const currencyHierarchy: AccountHierarchyNode = hierarchy(root)
-            .sum(d => d.balance[currency] * chartData_.modifier)
-            .sort((a, b) => (b.value || 0) - (a.value || 0));
-          if (currencyHierarchy.value !== 0) {
-            data[currency] = currencyHierarchy;
-          }
-        });
-
-        const renderer = (svg: SVGElement) => new HierarchyContainer(svg);
-        if (renderer) {
-          result.push({
-            name: chart.label,
-            data,
-            renderer,
-          });
-        }
-
-        break;
-      }
-      default:
-        break;
+    const parser = parsers[chart.type];
+    if (parser) {
+      result.push({
+        name: chart.label,
+        ...parser(chart.data, chart.label),
+      });
     }
   });
   return result;
+}
+
+export function parseQueryChart(
+  data: unknown
+): ChartWithData<LineChart | HierarchyContainer> | undefined {
+  if (!Array.isArray(data) || !data.length) {
+    return undefined;
+  }
+  if (data[0].group !== undefined) {
+    const validated = array(object({ group: string, balance: record(number) }))(
+      data
+    );
+    const root: AccountHierarchy = {
+      account: "(root)",
+      balance: {},
+      children: [],
+    };
+    const accountMap: Map<string, AccountHierarchy> = new Map([
+      [root.account, root],
+    ]);
+    const addNode = (node: AccountHierarchy) => {
+      const name = node.account;
+      const existing = accountMap.get(name);
+      if (existing) {
+        existing.balance = node.balance;
+        return;
+      }
+      accountMap.set(name, node);
+      const parentEnd = name.lastIndexOf(":");
+      const parentId = parentEnd > 0 ? name.slice(0, parentEnd) : root.account;
+      let parent = accountMap.get(parentId);
+      if (!parent) {
+        parent = { account: parentId, balance: {}, children: [] };
+        addNode(parent);
+      }
+      parent.children.push(node);
+    };
+    for (const { group: account = "(empty)", balance } of validated) {
+      addNode({ account, balance, children: [] });
+    }
+
+    const chartData: Record<string, AccountHierarchyNode> = {};
+    operatingCurrenciesWithConversion.forEach(currency => {
+      const currencyHierarchy: AccountHierarchyNode = hierarchy(root)
+        .sum(d => d.balance[currency])
+        .sort((a, b) => (b.value || 0) - (a.value || 0));
+      if (currencyHierarchy.value !== undefined) {
+        chartData[currency] = currencyHierarchy;
+      }
+    });
+
+    return {
+      data: chartData,
+      renderer: (svg: SVGElement) => new HierarchyContainer(svg),
+    };
+  }
+  if (data[0].date !== undefined) {
+    return parsers.balances(data, "");
+  }
+  return undefined;
 }

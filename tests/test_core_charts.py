@@ -1,73 +1,48 @@
 # pylint: disable=missing-docstring
 
-import datetime
-from collections import Counter
-
 from beancount.core.number import D
 from flask import g
+import pytest
 
 from fava.util.date import Interval
 
 
-def test_interval_totals(app, small_example_ledger):
+def test_interval_totals(app, small_example_ledger, snapshot):
     with app.test_request_context(""):
         g.conversion = None
         data = small_example_ledger.charts.interval_totals(
             Interval.MONTH, "Expenses"
         )
-        assert data == [
-            {
-                "date": datetime.date(2012, 11, 18),
-                "balance": {"EUR": D("280.00")},
-                "budgets": Counter(
-                    {"EUR": D("31.42857142857142857142857145")}
-                ),
-            },
-            {
-                "date": datetime.date(2012, 12, 1),
-                "balance": {"EUR": D("80.00")},
-                "budgets": Counter(
-                    {"EUR": D("48.57142857142857142857142861")}
-                ),
-            },
-        ]
+        snapshot(data)
 
 
-def test_linechart_data(app, example_ledger):
-    result = [
-        {"date": datetime.date(2000, 1, 1), "balance": {"USD": D("100")}},
-        {
-            "date": datetime.date(2000, 1, 2),
-            "balance": {"XYZ": D("1"), "USD": D("50")},
-        },
-        {
-            "date": datetime.date(2000, 1, 3),
-            "balance": {"USD": 0, "ABC": D("1"), "XYZ": D("1")},
-        },
-    ]
+def test_prices(example_ledger, snapshot):
+    data = example_ledger.charts.prices()
+    assert all(price[1] for price in data)
+    snapshot(data)
+
+
+def test_linechart_data(app, example_ledger, snapshot):
     with app.test_request_context():
         g.conversion = "units"
         data = example_ledger.charts.linechart(
             "Assets:Testing:MultipleCommodities"
         )
-        assert data == result
+        snapshot(data)
         g.conversion = "at_cost"
         g.ledger = example_ledger
         data = example_ledger.charts.linechart(
             "Assets:Testing:MultipleCommodities"
         )
-        assert data == result
+        snapshot(data)
 
 
-def test_net_worth(app, example_ledger):
+def test_net_worth(app, example_ledger, snapshot):
     with app.test_request_context():
         app.preprocess_request()
         g.conversion = "USD"
         data = example_ledger.charts.net_worth(Interval.MONTH)
-        assert data[-18]["date"] == datetime.date(2015, 1, 1)
-        assert data[-18]["balance"]["USD"] == D("39125.34004")
-        assert data[-1]["date"] == datetime.date(2016, 5, 10)
-        assert data[-1]["balance"]["USD"] == D("102327.53144")
+        snapshot(data)
 
 
 def test_hierarchy(app, example_ledger):
@@ -84,3 +59,17 @@ def test_hierarchy(app, example_ledger):
         etrade = data["children"][0]["children"][2]
         assert etrade["children"][4]["balance"] == {"USD": D("4899.98")}
         assert etrade["balance_children"] == {"USD": D("23137.54")}
+
+
+@pytest.mark.parametrize(
+    "query,snapshot_id",
+    [
+        ("select account, sum(position) group by account", "1"),
+        ("select joinstr(tags), sum(position) group by joinstr(tags)", "2"),
+        ("select date, sum(position) group by date", "3"),
+    ],
+)
+def test_query(example_ledger, snapshot, query, snapshot_id):
+    _, types, rows = example_ledger.query_shell.execute_query(query)
+    data = example_ledger.charts.query(types, rows)
+    snapshot(data, snapshot_id)

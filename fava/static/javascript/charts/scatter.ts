@@ -62,8 +62,10 @@ export class ScatterPlot extends BaseChart {
 
   draw(data: ScatterPlotDatum[]) {
     this.data = data;
-    // @ts-ignore
-    this.x.domain(extent(data, d => d.date));
+    const dateExtent = extent(data, d => d.date);
+    if (dateExtent[0] !== undefined) {
+      this.x.domain(dateExtent);
+    }
     this.y.domain(data.map(d => d.type));
 
     this.dots = this.canvas
@@ -79,7 +81,9 @@ export class ScatterPlot extends BaseChart {
     this.canvas
       .on("mousemove", () => {
         const matrix = canvasNode.getScreenCTM();
-        if (!matrix) return;
+        if (!matrix) {
+          return;
+        }
         const d = this.quadtree.find(...clientPoint(canvasNode, event));
         if (d) {
           tooltip

@@ -45,10 +45,14 @@ export function delegate<T extends Event, C extends Element>(
   selector: string,
   callback: (e: T, c: C) => void
 ) {
-  if (!element) return;
+  if (!element) {
+    return;
+  }
   element.addEventListener(type, event => {
     let { target } = event;
-    if (!target || !(target instanceof Node)) return;
+    if (!target || !(target instanceof Node)) {
+      return;
+    }
     if (!(target instanceof Element)) {
       target = target.parentNode;
     }
@@ -124,6 +128,24 @@ export function fetch(input: string, init = {}) {
 const validateAPIResponse = object({ data: unknown });
 
 /**
+ * Get the URL string for one of Fava's reports.
+ */
+export function urlFor(
+  report: string,
+  params?: Record<string, string>
+): string {
+  let url = `${favaAPI.baseURL}${report}`;
+  if (params) {
+    const urlParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      urlParams.set(key, value);
+    });
+    url += `?${urlParams.toString()}`;
+  }
+  return url;
+}
+
+/**
  * Fetch an API endpoint and convert the JSON data to an object.
  * @param endpoint - the endpoint to fetch
  * @param params - a string to append as params or an object.
@@ -132,16 +154,10 @@ export async function fetchAPI(
   endpoint: string,
   params?: Record<string, string>
 ): Promise<unknown> {
-  let url = `${favaAPI.baseURL}api/${endpoint}/`;
-  if (params) {
-    const urlParams = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      urlParams.set(key, value);
-    });
-    url += `?${urlParams.toString()}`;
-  }
-  const responseData = await fetch(url).then(handleJSON);
-  return validateAPIResponse(responseData).data;
+  const url = urlFor(`api/${endpoint}`, params);
+  const responseData = await fetch(url);
+  const json: unknown = await handleJSON(responseData);
+  return validateAPIResponse(json).data;
 }
 
 const putAPIValidators = {
@@ -168,8 +184,8 @@ export async function putAPI<T extends keyof apiTypes>(
     },
     body: JSON.stringify(body),
   }).then(handleJSON);
-  // @ts-ignore
-  return putAPIValidators[endpoint](validateAPIResponse(res).data);
+  const { data }: { data: unknown } = validateAPIResponse(res);
+  return putAPIValidators[endpoint](data) as ReturnType<apiTypes[T]>;
 }
 
 /**

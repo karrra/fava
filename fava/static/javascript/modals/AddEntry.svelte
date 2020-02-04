@@ -9,7 +9,10 @@
   import TransactionComponent from "../entry-forms/Transaction.svelte";
   import BalanceComponent from "../entry-forms/Balance.svelte";
 
-  const entryTypes = [[_("Transaction"), Transaction], [_("Balance"), Balance]];
+  const entryTypes = [
+    [_("Transaction"), Transaction],
+    [_("Balance"), Balance],
+  ];
   let entry = new Transaction();
 
   $: svelteComponent = {
@@ -21,7 +24,9 @@
 
   async function focus() {
     await tick();
-    if (entryComponent.focus) entryComponent.focus();
+    if (entryComponent.focus) {
+      entryComponent.focus();
+    }
   }
 
   async function submitAndNew(event) {
@@ -39,7 +44,9 @@
   }
 
   $: shown = $urlHash === "add-transaction";
-  $: if (shown) focus();
+  $: if (shown) {
+    focus();
+  }
 </script>
 
 <ModalBase {shown}>

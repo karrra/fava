@@ -21,26 +21,24 @@ import { addTooltip } from "./tooltip";
 interface AccountHierarchyDatum {
   account: string;
   balance: Record<string, number>;
-  balance_children: Record<string, number>;
   dummy?: boolean;
 }
 export interface AccountHierarchy extends AccountHierarchyDatum {
-  children: AccountHierarchy[] | null;
+  children: AccountHierarchy[];
 }
 export type AccountHierarchyNode = HierarchyNode<AccountHierarchyDatum>;
 
+/**
+ * Add internal nodes as fake leaf nodes to their own children.
+ *
+ * In the treemap, we only render leaf nodes, so for accounts that have both
+ * children and a balance, we want to duplicate them as leaf nodes.
+ */
 export function addInternalNodesAsLeaves(node: AccountHierarchy) {
-  if (node.children) {
-    node.children.forEach(o => {
-      addInternalNodesAsLeaves(o);
-    });
-    if (node.children.length) {
-      const copy = { ...node };
-      copy.children = null;
-      copy.dummy = true;
-      node.children.push(copy);
-      node.balance = {};
-    }
+  if (node.children.length) {
+    node.children.forEach(addInternalNodesAsLeaves);
+    node.children.push({ ...node, children: [], dummy: true });
+    node.balance = {};
   }
 }
 
@@ -119,7 +117,9 @@ class TreeMapChart extends BaseChart {
   update() {
     this.setHeight(Math.min(this.width / 2.5, 400));
 
-    if (!this.root) return;
+    if (!this.root) {
+      return;
+    }
 
     this.treemap.size([this.width, this.height]);
     this.treemap(this.root);
@@ -246,8 +246,6 @@ class SunburstChart extends BaseChart {
   // Fade all but the current sequence
   mouseOver(d: TreemapDatum) {
     this.setLabel(d);
-
-    // @ts-ignore
     this.paths.interrupt();
 
     // Only highlight segments that are ancestors of the current segment.
@@ -261,7 +259,6 @@ class SunburstChart extends BaseChart {
   // Restore everything to full opacity when moving off the visualization.
   mouseLeave() {
     this.paths
-      // @ts-ignore
       .transition()
       .duration(1000)
       .style("opacity", 1);
@@ -306,7 +303,7 @@ class SunburstChartContainer extends BaseChart {
         .setWidth(this.width / this.currencies.length)
         .setHeight(500)
         .set("labelText", d => {
-          const balance = d.data.balance_children[currency] || 0;
+          const balance = d.value || 0;
           return `${formatCurrency(balance)} ${currency} (${formatPercentage(
             balance / totalBalance
           )})`;
@@ -335,7 +332,7 @@ class SunburstChartContainer extends BaseChart {
 }
 
 export class HierarchyContainer extends BaseChart {
-  canvas: Selection<SVGGElement, unknown, null, undefined>;
+  canvas: SVGGElement;
 
   data?: Record<string, AccountHierarchyNode>;
 
@@ -349,7 +346,8 @@ export class HierarchyContainer extends BaseChart {
 
   constructor(svg: SVGElement) {
     super(svg);
-    this.canvas = select(this.svg).append("g");
+    this.canvas = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    svg.appendChild(this.canvas);
     this.has_mode_setting = true;
     this.margin = NO_MARGINS;
     this.currencies = [];
@@ -361,19 +359,21 @@ export class HierarchyContainer extends BaseChart {
     this.data = data;
     this.currencies = Object.keys(data);
 
-    this.canvas.html("");
+    this.canvas.innerHTML = "";
 
     if (this.currencies.length === 0) {
-      this.canvas
+      select(this.canvas)
         .append("text")
         .text("Chart is empty.")
         .attr("text-anchor", "middle")
         .attr("x", this.width / 2)
         .attr("y", 160 / 2);
     } else if (this.mode === "treemap") {
-      if (!this.currency) this.currency = this.currencies[0];
+      if (!this.currency) {
+        [this.currency] = this.currencies;
+      }
       const totalBalance = data[this.currency].value || 1;
-      const currentChart = new TreeMapChart(this.canvas.node()!)
+      const currentChart = new TreeMapChart(this.canvas)
         .setWidth(this.width)
         .set("tooltipText", d => {
           const balance = d.data.balance[this.currency];
@@ -389,7 +389,7 @@ export class HierarchyContainer extends BaseChart {
       this.currentChart = currentChart;
       this.has_currency_setting = true;
     } else {
-      this.currentChart = new SunburstChartContainer(this.canvas.node()!)
+      this.currentChart = new SunburstChartContainer(this.canvas)
         .setWidth(this.width)
         .draw(data);
 
@@ -401,7 +401,9 @@ export class HierarchyContainer extends BaseChart {
   }
 
   update() {
-    if (!this.data) return;
+    if (!this.data) {
+      return;
+    }
     this.draw(this.data);
     if (this.currentChart) {
       this.currentChart.setWidth(this.outerWidth).update();

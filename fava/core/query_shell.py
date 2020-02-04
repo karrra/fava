@@ -13,6 +13,9 @@ from beancount.utils import pager
 from fava.core.helpers import FavaAPIException, FavaModule
 from fava.util.excel import to_csv, to_excel, HAVE_EXCEL
 
+
+# This is to limit the size of the history file. Fava is not using readline at
+# all, but Beancount somehow still is...
 readline.set_history_length(1000)
 
 
@@ -48,19 +51,6 @@ class QueryShell(shell.BQLShell, FavaModule):
                     textwrap.dedent(fun.__doc__).strip(), file=self.outfile
                 ),
             )
-
-    @staticmethod
-    def get_history(max_entries):
-        """Get the most recently used shell commands (removing duplicates)."""
-        num_entries = readline.get_current_history_length()
-        history = []
-        for index in range(num_entries, 0, -1):
-            if len(history) >= max_entries:
-                return history
-            item = readline.get_history_item(index)
-            if item not in history:
-                history.insert(0, item)
-        return history
 
     def _loadfun(self):
         self.entries = self.ledger.entries
@@ -100,7 +90,7 @@ class QueryShell(shell.BQLShell, FavaModule):
 
         self.result = rtypes, rrows
 
-    def execute_query(self, query, add_to_history=False):
+    def execute_query(self, query):
         """Run a query.
 
         Arguments:
@@ -115,11 +105,9 @@ class QueryShell(shell.BQLShell, FavaModule):
         self._loadfun()
         with contextlib.redirect_stdout(self.buffer):
             self.onecmd(query)
-        if query and add_to_history:
-            readline.add_history(query.replace("\n", " "))
         contents = self.buffer.getvalue()
         self.buffer.truncate(0)
-        if not self.result:
+        if self.result is None:
             return (contents, None, None)
         types, rows = self.result
         self.result = None

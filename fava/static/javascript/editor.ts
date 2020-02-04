@@ -1,4 +1,4 @@
-import CodeMirror, { Editor, EditorFromTextArea, Position } from "codemirror";
+import CodeMirror, { Editor, EditorFromTextArea } from "codemirror";
 import Mousetrap from "mousetrap";
 
 import "codemirror/addon/mode/simple";
@@ -37,18 +37,24 @@ import "./codemirror/mode-beancount";
 import "./codemirror/hint-query";
 import "./codemirror/mode-query";
 
-import { select, selectAll, delegate, putAPI } from "./helpers";
+import { select, selectAll, putAPI } from "./helpers";
 import e from "./events";
 import router from "./router";
 import { notify } from "./notifications";
 import { closeOverlay, favaAPI } from "./stores";
 
-interface SearchCursor {
-  findNext(): boolean;
-  pos: { from: Position; to: Position };
+interface SimpleModeRule {
+  regex: string | RegExp;
+  token: string | string[] | null;
+  sol?: boolean;
+  mode?: { spec: string; end: string | RegExp };
 }
 
 declare module "codemirror" {
+  function defineSimpleMode(
+    name: string,
+    config: Record<string, SimpleModeRule[]>
+  ): void;
   interface EditorConfiguration {
     // defined in the edit/trailingspace addon
     showTrailingSpace?: boolean;
@@ -57,22 +63,7 @@ declare module "codemirror" {
       column: number;
       lineStyle: string;
     }[];
-  }
-  interface Editor {
-    // defined in the comment/comment addon
-    uncomment(
-      from: Position,
-      to: Position,
-      options: { lineComment: string }
-    ): boolean;
-    // defined in the comment/comment addon
-    lineComment(
-      from: Position,
-      to: Position,
-      options: { lineComment: string }
-    ): boolean;
-    // defined in the comment/comment addon
-    getSearchCursor(query: string): SearchCursor;
+    favaSaveButton?: HTMLButtonElement;
   }
   interface CommandActions {
     favaSave(editor: EditorFromTextArea): void;
@@ -89,10 +80,14 @@ declare module "codemirror" {
   }
 }
 
+export { CodeMirror };
+
 // This handles saving in both the main and the overlaid entry editors.
 CodeMirror.commands.favaSave = (cm: EditorFromTextArea) => {
-  // @ts-ignore
-  const button: HTMLButtonElement = cm.getOption("favaSaveButton");
+  const button = cm.getOption("favaSaveButton");
+  if (!button) {
+    return;
+  }
 
   const buttonText = button.textContent;
   button.disabled = true;
@@ -162,7 +157,7 @@ CodeMirror.commands.favaJumpToMarker = (cm: Editor) => {
 
   if (cursor.findNext()) {
     cm.focus();
-    doc.setCursor(cursor.pos.from);
+    doc.setCursor(cursor.from());
     cm.execCommand("goLineUp");
     cm.execCommand("favaCenterCursor");
   } else {
@@ -171,7 +166,7 @@ CodeMirror.commands.favaJumpToMarker = (cm: Editor) => {
 };
 
 // If the given key should be ignored for autocompletion
-function ignoreKey(key: string) {
+export function ignoreKey(key: string) {
   switch (key) {
     case "ArrowDown":
     case "ArrowUp":
@@ -192,61 +187,6 @@ function ignoreKey(key: string) {
     default:
       return false;
   }
-}
-
-// Initialize the query editor
-function initQueryEditor() {
-  const queryForm = select("#query-form") as HTMLFormElement;
-  if (!queryForm) {
-    return;
-  }
-
-  // @ts-ignore
-  const queryStringEl: HTMLTextAreaElement = queryForm.elements.query_string;
-  const queryOptions = {
-    mode: "beancount-query",
-    extraKeys: {
-      "Ctrl-Enter": (cm: Editor) => {
-        (cm as EditorFromTextArea).save();
-        e.trigger("form-submit-query", queryForm);
-      },
-      "Cmd-Enter": (cm: Editor) => {
-        (cm as EditorFromTextArea).save();
-        e.trigger("form-submit-query", queryForm);
-      },
-    },
-    placeholder: queryStringEl.getAttribute("placeholder") || undefined,
-  };
-  const editor = CodeMirror.fromTextArea(queryStringEl, queryOptions);
-
-  editor.on("keyup", (cm: Editor, event: Event) => {
-    if (
-      !cm.state.completionActive &&
-      !ignoreKey((event as KeyboardEvent).key)
-    ) {
-      CodeMirror.commands.autocomplete(cm, undefined, {
-        completeSingle: false,
-      });
-    }
-  });
-
-  delegate(
-    select("#query-container"),
-    "click",
-    ".toggle-box-header",
-    (event, closest: HTMLDivElement) => {
-      const wrapper = closest.closest(".toggle-box");
-      if (!wrapper) return;
-      if (wrapper.classList.contains("inactive")) {
-        const code = wrapper.querySelector("code");
-        editor.setValue(code ? code.textContent || "" : "");
-        editor.save();
-        e.trigger("form-submit-query", queryForm);
-        return;
-      }
-      wrapper.classList.toggle("toggled");
-    }
-  );
 }
 
 // Initialize read-only editors
@@ -310,7 +250,6 @@ export default function initSourceEditor(name: string) {
     activeEditor = editor;
   }
   const saveButton = select(`${name}-submit`) as HTMLButtonElement;
-  // @ts-ignore
   editor.setOption("favaSaveButton", saveButton);
 
   editor.on("changes", (cm: Editor) => {
@@ -363,7 +302,6 @@ export default function initSourceEditor(name: string) {
 }
 
 e.on("page-loaded", () => {
-  initQueryEditor();
   initReadOnlyEditors();
   initSourceEditor("#source-editor");
 });
@@ -374,7 +312,8 @@ const leaveMessage =
 e.on("navigate", (state: { interrupt?: boolean }) => {
   if (activeEditor) {
     if (!activeEditor.getDoc().isClean()) {
-      const leave = window.confirm(leaveMessage); // eslint-disable-line no-alert
+      // eslint-disable-next-line no-alert
+      const leave = window.confirm(leaveMessage);
       if (!leave) {
         state.interrupt = true;
       } else {

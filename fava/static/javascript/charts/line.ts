@@ -1,7 +1,7 @@
 import { max, merge, min } from "d3-array";
 import { axisLeft, axisBottom, Axis } from "d3-axis";
 import { scaleLinear, scaleUtc, ScaleLinear, ScaleTime } from "d3-scale";
-import { event, clientPoint, select, Selection } from "d3-selection";
+import { event, clientPoint, select, Selection, BaseType } from "d3-selection";
 import { line, Line } from "d3-shape";
 import { quadtree, Quadtree } from "d3-quadtree";
 
@@ -11,13 +11,13 @@ import { BaseChart } from "./base";
 import { scales } from "./helpers";
 import { tooltip } from "./tooltip";
 
-interface LineChartDatum {
+export interface LineChartDatum {
   name: string;
   date: Date;
   value: number;
 }
 
-type LineChartData = {
+export type LineChartData = {
   name: string;
   values: LineChartDatum[];
 };
@@ -47,7 +47,7 @@ export class LineChart extends BaseChart {
 
   lines: Selection<SVGPathElement, LineChartData, SVGGElement, unknown>;
 
-  dots: Selection<SVGCircleElement, LineChartDatum, SVGGElement, LineChartData>;
+  dots: Selection<SVGCircleElement, LineChartDatum, BaseType, unknown>;
 
   constructor(svg: SVGElement) {
     super(svg);
@@ -73,7 +73,6 @@ export class LineChart extends BaseChart {
     this.yAxisSelection = this.canvas.append("g").attr("class", "y axis");
     this.quadtree = quadtree();
     this.lines = this.canvas.selectAll(".line");
-    // @ts-ignore
     this.dots = this.canvas.selectAll("g.dot").selectAll("circle");
   }
 
@@ -87,7 +86,7 @@ export class LineChart extends BaseChart {
     // Span y-axis as max minus min value plus 5 percent margin
     const minDataValue = min(this.data, d => min(d.values, x => x.value));
     const maxDataValue = max(this.data, d => max(d.values, x => x.value));
-    if (minDataValue && maxDataValue) {
+    if (minDataValue !== undefined && maxDataValue !== undefined) {
       this.y.domain([
         minDataValue - (maxDataValue - minDataValue) * 0.05,
         maxDataValue + (maxDataValue - minDataValue) * 0.05,
@@ -108,12 +107,12 @@ export class LineChart extends BaseChart {
       .enter()
       .append("g")
       .attr("class", "dot")
+      .style("fill", d => scales.currencies(d.name))
       .selectAll("circle")
       .data(d => d.values)
       .enter()
       .append("circle")
-      .attr("r", 3)
-      .style("fill", d => scales.currencies(d.name));
+      .attr("r", 3);
 
     const canvasNode = this.canvas.node()!;
     this.canvas

@@ -1,7 +1,7 @@
 all: fava/static/gen/app.js
 
 fava/static/gen/app.js: fava/static/css/* fava/static/javascript/* fava/static/package.json
-	cd fava/static; npm install; npm run build
+	cd fava/static; npm install --no-progress; npm run build
 
 .PHONY: clean
 clean: mostlyclean
@@ -30,13 +30,20 @@ lint:
 test:
 	tox
 
+.PHONY: update-snapshots
+update-snapshots:
+	find . -name "__snapshots__" -type d -prune -exec rm -r "{}" +
+	-SNAPSHOT_UPDATE=1 tox
+	tox
+
 .PHONY: docs
 docs:
 	tox -e docs
 
 .PHONY: run-example
 run-example:
-	BEANCOUNT_FILE= fava --debug tests/data/example.beancount
+	@xdg-open http://localhost:3333
+	BEANCOUNT_FILE= fava -p 3333 --debug tests/data/example.beancount
 
 .PHONY: bql-grammar
 bql-grammar:
